@@ -26,6 +26,10 @@ A powerful real-time speech-to-text transcription application that runs locally 
 ### Installation
 
 1. **Clone or download the project**
+   ```bash
+   git clone <https://github.com/snehapradeep25/Transcriber-without-using-api.git>
+   cd real-time-transcriber
+   ```
 
 2. **Install dependencies**
    ```bash
