@@ -1,0 +1,15 @@
+# Core transcription
+faster-whisper>=0.10.0
+numpy>=1.21.0
+
+# Web framework and real-time communication
+flask>=2.0.0
+flask-socketio>=5.0.0
+python-socketio>=5.0.0
+
+# Audio processing (optional - depends on your setup)
+# pyaudio>=0.2.11  # Uncomment if you need PyAudio for direct audio capture
+
+# Additional utilities that might be needed
+eventlet>=0.33.0  # For Socket.IO server
+dnspython>=2.0.0  # For Socket.IO reliability

@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time English Transcriber</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            flex-grow: 1;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .control-panel {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .controls {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #f44336, #da190b);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #2196F3, #0b7dda);
+            color: white;
+        }
+
+        .btn-highlight {
+            background: linear-gradient(45deg, #FF9800, #F57C00);
+            color: white;
+        }
+
+        .btn-download {
+            background: linear-gradient(45deg, #9C27B0, #673AB7);
+            color: white;
+        }
+
+        .btn-highlight.active {
+            background: linear-gradient(45deg, #FF5722, #E64A19);
+            box-shadow: 0 0 20px rgba(255, 87, 34, 0.5);
+            animation: pulse 2s infinite;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .status.ready {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.recording {
+            background: #cce5ff;
+            color: #004085;
+            border: 1px solid #99d6ff;
+            animation: pulse 2s infinite;
+        }
+
+        .status.highlighting {
+            font-weight: 100;
+            color: #8b4513;
+            border: 1px solid #e9e5e0;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .mode-indicator {
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .mode-indicator.highlight-mode {
+            background: #fff3e0;
+            color: #e65100;
+            border: 2px solid #ffcc02;
+            display: block;
+        }
+
+        .transcription-area {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 30px;
+            min-height: 400px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .transcription-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .transcription-header h2 {
+            color: #495057;
+            font-size: 1.5em;
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .clear-btn {
+            padding: 8px 15px;
+            font-size: 12px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .download-btn {
+            padding: 8px 15px;
+            font-size: 12px;
+            background: #9C27B0;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .clear-btn:hover {
+            background: #545b62;
+        }
+
+        .download-btn:hover {
+            background: #7B1FA2;
+        }
+
+        .transcription-content {
+            max-height: 350px;
+            overflow-y: auto;
+            padding: 15px;
+            border: 2px dashed #dee2e6;
+            border-radius: 10px;
+            background-color: #f8f9fa;
+        }
+
+        .unified-text {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            line-height: 1.6;
+            font-size: 16px;
+            color: #2c3e50;
+            min-height: 100px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 40px;
+        }
+
+        .audio-visualizer {
+            display: flex;
+            justify-content: center;
+            align-items: end;
+            height: 60px;
+            gap: 3px;
+            margin: 20px 0;
+        }
+
+        .bar {
+            width: 4px;
+            background: linear-gradient(to top, #667eea, #764ba2);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        /* Highlight styles */
+        .highlighted {
+            background: linear-gradient(120deg, #ffd700 0%, #ffed4e 100%);
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-weight: bold;
+            color: #b8860b;
+            box-shadow: 0 1px 3px rgba(255, 215, 0, 0.3);
+            animation: highlightPulse 0.5s ease-in-out;
+        }
+
+        @keyframes highlightPulse {
+            0% { background: #ffd700; }
+            50% { background: #ffff00; }
+            100% { background: #ffd700; }
+        }
+
+        .recently-highlighted {
+            background: linear-gradient(120deg, #90ee90 0%, #98fb98 100%);
+            animation: fadeToNormal 2s ease-out forwards;
+        }
+
+        @keyframes fadeToNormal {
+            0% { background: linear-gradient(120deg, #90ee90 0%, #98fb98 100%); }
+            100% { background: linear-gradient(120deg, #ffd700 0%, #ffed4e 100%); }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .controls {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .header-buttons {
+                flex-direction: column;
+                gap: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎤 Real-Time English Transcriber</h1>
+            <p>Speak clearly and get instant transcriptions</p>
+        </div>
+
+        <div class="control-panel">
+            <div id="status" class="status loading">
+                🔄 Loading transcription model...
+            </div>
+
+            <div class="mode-indicator" id="modeIndicator">
+                🖍️ Highlight Mode Active - Speak words to highlight them in your transcriptions!
+            </div>
+
+            <div class="controls">
+                <button id="startBtn" class="btn btn-primary" disabled>
+                    🎤 Start Recording
+                </button>
+                <button id="stopBtn" class="btn btn-danger" disabled>
+                    ⏹️ Stop Recording
+                </button>
+                <button id="highlightBtn" class="btn btn-highlight" disabled>
+                    🖍️ Highlight Mode
+                </button>
+                <button id="testBtn" class="btn btn-secondary" disabled>
+                    🧪 Test Transcription
+                </button>
+            </div>
+
+            <div class="audio-visualizer" id="visualizer" style="display: none;">
+                <!-- Audio visualization bars will be added here -->
+            </div>
+        </div>
+
+        <div class="transcription-area">
+            <div class="transcription-header">
+                <h2>📝 Transcriptions</h2>
+                <div class="header-buttons">
+                    <button id="downloadBtn" class="download-btn">📄 Download PDF</button>
+                    <button id="clearBtn" class="clear-btn">Clear All</button>
+                </div>
+            </div>
+            <div class="transcription-content" id="transcriptionContent">
+                <div class="empty-state">
+                    Start recording to see transcriptions appear here...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class TranscriberApp {
+            constructor() {
+                this.socket = io();
+                this.isRecording = false;
+                this.isHighlightMode = false;
+                this.mediaRecorder = null;
+                this.audioContext = null;
+                this.stream = null;
+                this.unifiedText = ''; // Store all text as one continuous string
+                this.processor = null;
+                
+                this.initializeElements();
+                this.setupSocketListeners();
+                this.setupEventListeners();
+                this.createVisualizer();
+            }
+
+            initializeElements() {
+                this.statusEl = document.getElementById('status');
+                this.startBtn = document.getElementById('startBtn');
+                this.stopBtn = document.getElementById('stopBtn');
+                this.highlightBtn = document.getElementById('highlightBtn');
+                this.testBtn = document.getElementById('testBtn');
+                this.clearBtn = document.getElementById('clearBtn');
+                this.downloadBtn = document.getElementById('downloadBtn');
+                this.transcriptionContent = document.getElementById('transcriptionContent');
+                this.visualizer = document.getElementById('visualizer');
+                this.modeIndicator = document.getElementById('modeIndicator');
+            }
+
+            setupSocketListeners() {
+                this.socket.on('transcriber_loading', () => {
+                    this.updateStatus('loading', '🔄 Loading Whisper model...');
+                });
+
+                this.socket.on('transcriber_ready', () => {
+                    this.updateStatus('ready', '✅ Ready to transcribe!');
+                    this.startBtn.disabled = false;
+                    this.testBtn.disabled = false;
+                    this.highlightBtn.disabled = false;
+                });
+
+                this.socket.on('transcriber_error', (data) => {
+                    this.updateStatus('error', '❌ Error: ' + data.error);
+                });
+
+                this.socket.on('transcription_result', (data) => {
+                    if (this.isHighlightMode) {
+                        this.handleHighlightTranscription(data.text, data.timestamp);
+                    } else {
+                        this.addTranscription(data.text, data.timestamp);
+                    }
+                });
+
+                this.socket.on('transcription_error', (data) => {
+                    console.error('Transcription error:', data.error);
+                });
+
+                this.socket.on('test_result', (data) => {
+                    if (data.error) {
+                        alert('Test error: ' + data.error);
+                    } else {
+                        this.addTranscription('[TEST] ' + data.text, data.timestamp);
+                    }
+                });
+            }
+
+            setupEventListeners() {
+                this.startBtn.addEventListener('click', () => this.startRecording());
+                this.stopBtn.addEventListener('click', () => this.stopRecording());
+                this.highlightBtn.addEventListener('click', () => this.toggleHighlightMode());
+                this.testBtn.addEventListener('click', () => this.testTranscription());
+                this.clearBtn.addEventListener('click', () => this.clearTranscriptions());
+                this.downloadBtn.addEventListener('click', () => this.downloadPDF());
+            }
+
+            toggleHighlightMode() {
+                if (!this.unifiedText.trim()) {
+                    alert('Please record some text first before using highlight mode!');
+                    return;
+                }
+
+                this.isHighlightMode = !this.isHighlightMode;
+                
+                if (this.isHighlightMode) {
+                    this.highlightBtn.classList.add('active');
+                    this.highlightBtn.textContent = '🔴 Exit Highlight Mode';
+                    this.modeIndicator.classList.add('highlight-mode');
+                    this.startBtn.textContent = '🖍️ Start Highlighting';
+                } else {
+                    this.highlightBtn.classList.remove('active');
+                    this.highlightBtn.textContent = '🖍️ Highlight Mode';
+                    this.modeIndicator.classList.remove('highlight-mode');
+                    this.startBtn.textContent = '🎤 Start Recording';
+                    
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    }
+                }
+            }
+
+            handleHighlightTranscription(text, timestamp) {
+                console.log('Highlight mode transcription:', text);
+                
+                const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+                
+                words.forEach(word => {
+                    this.highlightWordInText(word);
+                });
+            }
+
+            highlightWordInText(searchWord) {
+                console.log('Searching for word:', searchWord);
+                
+                // Clean the word (remove punctuation)
+                const cleanWord = searchWord.replace(/[^\w]/g, '');
+                if (cleanWord.length < 2) return;
+
+                // Create a regex to find the word (case insensitive)
+                const regex = new RegExp(`\\b${cleanWord}\\b`, 'gi');
+                
+                // Highlight the word in the unified text
+                this.unifiedText = this.unifiedText.replace(regex, (match) => {
+                    // Don't highlight if already highlighted
+                    if (this.unifiedText.indexOf(`<span class="highlighted">${match}</span>`) !== -1) {
+                        return match;
+                    }
+                    return `<span class="highlighted">${match}</span>`;
+                });
+                
+                // Re-render to show highlights
+                this.renderTranscriptions();
+            }
+
+            createVisualizer() {
+                for (let i = 0; i < 20; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'bar';
+                    bar.style.height = '5px';
+                    this.visualizer.appendChild(bar);
+                }
+            }
+
+            updateVisualizer(dataArray) {
+                const bars = this.visualizer.querySelectorAll('.bar');
+                bars.forEach((bar, i) => {
+                    const value = dataArray[i * Math.floor(dataArray.length / bars.length)];
+                    const height = (value / 255) * 50 + 5;
+                    bar.style.height = height + 'px';
+                });
+            }
+
+            updateStatus(type, message) {
+                this.statusEl.className = 'status ' + type;
+                this.statusEl.textContent = message;
+            }
+
+            async startRecording() {
+                try {
+                    console.log('Starting recording...');
+                    
+                    this.stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1,
+                            echoCancellation: false,
+                            noiseSuppression: false,
+                            autoGainControl: false
+                        } 
+                    });
+
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                    const source = this.audioContext.createMediaStreamSource(this.stream);
+                    const analyser = this.audioContext.createAnalyser();
+                    analyser.fftSize = 256;
+                    source.connect(analyser);
+                    
+                    // Create processor for real-time audio processing
+                    this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+                    let audioBuffer = [];
+                    const bufferSize = 16000 * 3; // 3 seconds of audio
+                    
+                    this.processor.onaudioprocess = (event) => {
+                        if (!this.isRecording) return;
+                        
+                        const inputData = event.inputBuffer.getChannelData(0);
+                        audioBuffer = audioBuffer.concat(Array.from(inputData));
+                        
+                        // Send audio when buffer is full
+                        if (audioBuffer.length >= bufferSize) {
+                            this.sendAudioData(new Float32Array(audioBuffer));
+                            audioBuffer = [];
+                        }
+                    };
+                    
+                    source.connect(this.processor);
+                    this.processor.connect(this.audioContext.destination);
+                    
+                    this.isRecording = true;
+                    
+                    if (this.isHighlightMode) {
+                        this.updateStatus('highlighting', '🖍️ Highlighting mode active! Speak words to highlight them.');
+                    } else {
+                        this.updateStatus('recording', '🎤 Recording... Speak now!');
+                    }
+                    
+                    this.startBtn.disabled = true;
+                    this.stopBtn.disabled = false;
+                    this.visualizer.style.display = 'flex';
+                    
+                    this.startVisualization(analyser);
+
+                } catch (error) {
+                    console.error('Error starting recording:', error);
+                    alert('Error accessing microphone: ' + error.message);
+                }
+            }
+
+            sendAudioData(audioData) {
+                try {
+                    const buffer = new ArrayBuffer(audioData.length * 4);
+                    const view = new Float32Array(buffer);
+                    view.set(audioData);
+                    
+                    const uint8Array = new Uint8Array(buffer);
+                    let binary = '';
+                    for (let i = 0; i < uint8Array.byteLength; i++) {
+                        binary += String.fromCharCode(uint8Array[i]);
+                    }
+                    const base64Audio = btoa(binary);
+                    
+                    console.log('Sending audio data, length:', audioData.length);
+                    this.socket.emit('audio_data', { audio: base64Audio });
+                } catch (error) {
+                    console.error('Error sending audio data:', error);
+                }
+            }
+
+            startVisualization(analyser) {
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                
+                const updateVisualization = () => {
+                    if (this.isRecording) {
+                        analyser.getByteFrequencyData(dataArray);
+                        this.updateVisualizer(dataArray);
+                        requestAnimationFrame(updateVisualization);
+                    }
+                };
+                
+                updateVisualization();
+            }
+
+            stopRecording() {
+                console.log('Stopping recording...');
+                this.isRecording = false;
+                
+                if (this.processor) {
+                    this.processor.disconnect();
+                    this.processor = null;
+                }
+                
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                }
+                
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
+                
+                if (this.isHighlightMode) {
+                    this.updateStatus('ready', '✅ Highlight mode ready. Click Start Highlighting to continue.');
+                } else {
+                    this.updateStatus('ready', '✅ Recording stopped. Ready for next recording!');
+                }
+                
+                this.startBtn.disabled = false;
+                this.stopBtn.disabled = true;
+                this.visualizer.style.display = 'none';
+            }
+
+            async testTranscription() {
+                try {
+                    console.log('Starting test transcription...');
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: { 
+                            sampleRate: 16000, 
+                            channelCount: 1,
+                            echoCancellation: false,
+                            noiseSuppression: false 
+                        } 
+                    });
+                    
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                    const source = audioContext.createMediaStreamSource(stream);
+                    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                    
+                    this.updateStatus('recording', '🧪 Recording 3 seconds for test...');
+                    
+                    let audioBuffer = [];
+                    let recording = true;
+                    
+                    processor.onaudioprocess = (event) => {
+                        if (!recording) return;
+                        const inputData = event.inputBuffer.getChannelData(0);
+                        audioBuffer = audioBuffer.concat(Array.from(inputData));
+                    };
+                    
+                    source.connect(processor);
+                    processor.connect(audioContext.destination);
+                    
+                    setTimeout(() => {
+                        recording = false;
+                        processor.disconnect();
+                        stream.getTracks().forEach(track => track.stop());
+                        audioContext.close();
+                        
+                        // Send test audio
+                        const audioArray = new Float32Array(audioBuffer);
+                        const buffer = new ArrayBuffer(audioArray.length * 4);
+                        const view = new Float32Array(buffer);
+                        view.set(audioArray);
+                        
+                        const uint8Array = new Uint8Array(buffer);
+                        let binary = '';
+                        for (let i = 0; i < uint8Array.byteLength; i++) {
+                            binary += String.fromCharCode(uint8Array[i]);
+                        }
+                        const base64Audio = btoa(binary);
+                        
+                        console.log('Sending test audio, length:', audioArray.length);
+                        this.socket.emit('test_transcription', { audio: base64Audio });
+                        
+                        this.updateStatus('ready', '✅ Test completed!');
+                    }, 3000);
+                    
+                } catch (error) {
+                    console.error('Test error:', error);
+                    alert('Test failed: ' + error.message);
+                    this.updateStatus('ready', '✅ Ready to transcribe!');
+                }
+            }
+
+            addTranscription(text, timestamp) {
+                // Add text to unified text with a space
+                if (this.unifiedText.trim()) {
+                    this.unifiedText += ' ' + text;
+                } else {
+                    this.unifiedText = text;
+                }
+                
+                this.renderTranscriptions();
+            }
+
+            renderTranscriptions() {
+                if (!this.unifiedText.trim()) {
+                    this.transcriptionContent.innerHTML = '<div class="empty-state">Start recording to see transcriptions appear here...</div>';
+                    return;
+                }
+
+                const html = '<div class="unified-text">' + this.unifiedText + '</div>';
+                this.transcriptionContent.innerHTML = html;
+            }
+
+            clearTranscriptions() {
+                this.unifiedText = '';
+                this.renderTranscriptions();
+                
+                // Exit highlight mode if active
+                if (this.isHighlightMode) {
+                    this.toggleHighlightMode();
+                }
+            }
+
+            downloadPDF() {
+                if (!this.unifiedText.trim()) {
+                    alert('No transcriptions to download!');
+                    return;
+                }
+
+                try {
+                    // Create a temporary div to strip HTML tags for PDF
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = this.unifiedText;
+                    const plainText = tempDiv.textContent || tempDiv.innerText || '';
+
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+
+                    // Set font
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(12);
+
+                    // Add title
+                    doc.setFontSize(16);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('Transcription Report', 20, 20);
+                    
+                    // Add date
+                    doc.setFontSize(10);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text('Generated on: ' + new Date().toLocaleString(), 20, 30);
+
+                    // Add content
+                    doc.setFontSize(12);
+                    const lines = doc.splitTextToSize(plainText, 170);
+                    doc.text(lines, 20, 45);
+
+                    // Save the PDF
+                    const fileName = 'transcription_' + new Date().toISOString().slice(0, 10) + '.pdf';
+                    doc.save(fileName);
+
+                    console.log('PDF downloaded successfully');
+                } catch (error) {
+                    console.error('Error generating PDF:', error);
+                    alert('Error generating PDF. Please try again.');
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new TranscriberApp();
+        });
+
+        // Add reset button functionality
+        function resetTranscriber() {
+            socket.emit('reset_transcriber');
+        }
+
+        // Add stats monitoring
+        function getStats() {
+            socket.emit('get_stats');
+        }
+
+        // Handle new events
+        socket.on('transcriber_reset', function(data) {
+            console.log('Transcriber reset:', data);
+        });
+
+        socket.on('transcriber_stats', function(data) {
+            console.log('Transcriber stats:', data);
+        });
+    </script>
+</body>
+</html>
